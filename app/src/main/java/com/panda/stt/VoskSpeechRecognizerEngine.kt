@@ -21,7 +21,8 @@ class VoskSpeechRecognizerEngine(
 ) : SpeechRecognizerEngine {
 
     companion object {
-        private const val TAG = "VoskSpeechRecognizer"
+        // Filtra en Logcat con: adb logcat -s PandaDebug/STT
+        private const val TAG = "PandaDebug/STT"
     }
 
     private var speechService: SpeechService? = null
@@ -38,16 +39,18 @@ class VoskSpeechRecognizerEngine(
     }
 
     override fun startListening() {
+        Log.d(TAG, "startListening() llamado. Desempaquetando modelo ($modelAssetPath) ...")
         StorageService.unpack(
             context,
             modelAssetPath,
             "model",
             { unpackedModel: Model ->
+                Log.i(TAG, "✅ Modelo de comandos cargado correctamente.")
                 model = unpackedModel
                 listenOnce(unpackedModel)
             },
             { exception: Exception ->
-                Log.e(TAG, "No se pudo cargar el modelo de comandos", exception)
+                Log.e(TAG, "❌ No se pudo cargar el modelo de comandos", exception)
                 onError?.invoke("no_model")
             }
         )
@@ -56,29 +59,17 @@ class VoskSpeechRecognizerEngine(
     private fun listenOnce(model: Model) {
         try {
             val recognizer = Recognizer(model, 16000.0f)
-            speechService = SpeechService(recognizer, 16000.0f).also {
-                it.startListening(object : RecognitionListener {
-                    override fun onPartialResult(hypothesis: String?) { /* no-op */ }
-
-                    override fun onResult(hypothesis: String?) {
-                        emitFinal(hypothesis)
-                    }
-
-                    override fun onFinalResult(hypothesis: String?) {
-                        emitFinal(hypothesis)
-                        stopListening()
-                    }
-
-                    override fun onError(exception: Exception?) {
-                        Log.e(TAG, "Error reconociendo comando", exception)
-                        onError?.invoke(exception?.message ?: "unknown_error")
-                    }
-
-                    override fun onTimeout() {
-                        onError?.invoke("timeout")
-                        stopListening()
-                    }
-                })
+            Log.d(TAG, "Recognizer de comandos creado, arrancando SpeechService...")
+            speechService = SpeechService(recognizer, 16000.0f).also { service ->
+                val startedOk = try {
+                    service.startListening(buildListener())
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ startListening() lanzó excepción (posible fallo de AudioRecord/permiso)", e)
+                    onError?.invoke("audio_start_failed")
+                    false
+                }
+                Log.d(TAG, "SpeechService.startListening() invocado. OK=$startedOk")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error inicializando reconocedor de comandos", e)
@@ -86,11 +77,62 @@ class VoskSpeechRecognizerEngine(
         }
     }
 
+    private fun buildListener() = object : RecognitionListener {
+        override fun onPartialResult(hypothesis: String?) {
+            Log.d(TAG, "PARTIAL -> $hypothesis")
+        }
+
+        override fun onResult(hypothesis: String?) {
+            Log.i(TAG, "RESULT -> $hypothesis")
+            emitFinal(hypothesis)
+        }
+
+        override fun onFinalResult(hypothesis: String?) {
+            Log.i(TAG, "FINAL -> $hypothesis")
+            emitFinal(hypothesis)
+            stopListening()
+        }
+
+        override fun onError(exception: Exception?) {
+            Log.e(TAG, "Error reconociendo comando", exception)
+            onError?.invoke(exception?.message ?: "unknown_error")
+        }
+
+        override fun onTimeout() {
+            Log.w(TAG, "onTimeout() capturando comando -> se cierra la escucha")
+            onError?.invoke("timeout")
+            stopListening()
+        }
+    }
+
     private fun emitFinal(resultJson: String?) {
-        if (resultJson.isNullOrBlank()) return
-        val text = runCatching { JSONObject(resultJson).optString("text") }.getOrDefault("")
+        if (resultJson.isNullOrBlank()) {
+            Log.v(TAG, "emitFinal: JSON vacío/nulo")
+            return
+        }
+        val json = runCatching { JSONObject(resultJson) }.getOrNull()
+        if (json == null) {
+            Log.w(TAG, "No se pudo parsear el JSON de comando: $resultJson")
+            return
+        }
+
+        val wordsArray = json.optJSONArray("result")
+        if (wordsArray != null) {
+            for (i in 0 until wordsArray.length()) {
+                val w = wordsArray.optJSONObject(i) ?: continue
+                Log.d(
+                    TAG,
+                    "  palabra='${w.optString("word")}' conf=${w.optDouble("conf", -1.0)}"
+                )
+            }
+        }
+
+        val text = json.optString("text")
+        Log.d(TAG, "Comando reconocido: \"$text\"")
         if (text.isNotBlank()) {
             onResult?.invoke(text)
+        } else {
+            Log.w(TAG, "Texto vacío: Vosk no entendió nada (silencio o ruido)")
         }
     }
 

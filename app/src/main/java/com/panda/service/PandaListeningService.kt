@@ -32,6 +32,10 @@ class PandaListeningService : Service() {
         super.onCreate()
         startForeground(NOTIFICATION_ID, buildNotification())
 
+        // Chequeo de debug: confirma permiso + audio real ANTES de que Vosk
+        // tome el micrófono. Ver Logcat con: adb logcat -s PandaDebug/Mic
+        MicDiagnostics.runQuickCheck(applicationContext)
+
         val wakeWordEngine = VoskWakeWordEngine(applicationContext)
         val speechRecognizer = VoskSpeechRecognizerEngine(applicationContext)
         val speechSynthesizer = AndroidSpeechSynthesizer(applicationContext)
