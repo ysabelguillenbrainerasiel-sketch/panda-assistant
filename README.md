@@ -74,3 +74,4 @@ El APK queda en `app/build/outputs/apk/debug/`.
 
 Estos se agregarán como módulos nuevos bajo `com.panda.<módulo>/`
 implementando sus propias interfaces en `core/`, siguiendo el mismo patrón.
+
