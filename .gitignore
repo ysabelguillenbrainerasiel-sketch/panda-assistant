@@ -1,0 +1,12 @@
+*.iml
+.gradle
+/local.properties
+.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/src/main/assets/model-wakeword/*
+!app/src/main/assets/model-wakeword/.gitkeep

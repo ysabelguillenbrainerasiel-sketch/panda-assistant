@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Panda" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/panda_black</item>
+        <item name="colorPrimaryVariant">@color/panda_black</item>
+        <item name="colorOnPrimary">@color/panda_white</item>
+    </style>
+</resources>
